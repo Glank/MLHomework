@@ -24,7 +24,7 @@ def download_all():
     if not exists(full_fn):
       download(url, DATA_DIR, fn)
 
-def stream_mnist(img_fn, label_fn, start=0, end=None, dtype=torch.float):
+def stream_mnist(img_fn, label_fn, start=0, end=None, dtype=torch.float, only_label=None):
   # read the images
   with open(img_fn, 'rb') as img_f:
     hdr_data = img_f.read(16)
@@ -57,8 +57,10 @@ def stream_mnist(img_fn, label_fn, start=0, end=None, dtype=torch.float):
 
         lbl_f.seek(8+i)
         label = torch.zeros((10,), dtype=dtype)
-        label[lbl_f.read(1)[0]] = 1
-        yield img, label
+        label_n = lbl_f.read(1)[0]
+        label[label_n] = 1
+        if only_label is None or label_n == only_label:
+          yield img, label
 
 def open_mnist(img_fn, label_fn):
   # read the images
@@ -102,12 +104,13 @@ def print_img(img):
 
 class MNISTDataset(torch.utils.data.IterableDataset):
   download_lock = Lock()
-  def __init__(self, start=0, end=None, test=False):
+  def __init__(self, start=0, end=None, test=False, only_label=None):
     super(MNISTDataset).__init__()
     assert end is None or end>=start
     self.start = start
     self.end = end
     self.test = test
+    self.only_label = only_label
   def __iter__(self):
     worker_info = torch.utils.data.get_worker_info()
     if worker_info is None:
@@ -125,7 +128,7 @@ class MNISTDataset(torch.utils.data.IterableDataset):
         MNISTDataset.download_lock.release()
     imgs_fn = join(DATA_DIR, 'test-imgs' if self.test else 'train-imgs')
     labels_fn = join(DATA_DIR, 'test-labels' if self.test else 'train-labels')
-    return stream_mnist(imgs_fn, labels_fn, start, end)
+    return stream_mnist(imgs_fn, labels_fn, start, end, only_label=self.only_label)
 
 def main():
   download_all()
